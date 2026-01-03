@@ -33,7 +33,7 @@ class BookingSerializer(serializers.ModelSerializer):
 
     # машина
     car_id = serializers.PrimaryKeyRelatedField(
-        queryset=Car.objects.all(),
+        queryset=Car.objects.filter(is_available=True),
         write_only=True
     )
     car = serializers.CharField(
@@ -88,23 +88,23 @@ class BookingSerializer(serializers.ModelSerializer):
         end_time = data.get('end_time')
         car = data.get('car_id')
 
-        # проверяем даты только если они переданы
         if start_time and end_time:
             if start_time >= end_time:
                 raise serializers.ValidationError(
                     'Дата окончания должна быть позже даты начала'
                 )
 
-            # запрещаем бронирование в прошлом ТОЛЬКО при создании
+            # запрещаем бронирование в прошлом (только при создании)
             if not self.instance and start_time < timezone.now():
                 raise serializers.ValidationError(
                     'Нельзя создавать бронирование в прошлом'
                 )
 
-            # проверка пересечений
+            # проверка пересечений (ТОЛЬКО АКТИВНЫЕ БРОНИ)
             if car:
                 overlapping = Booking.objects.filter(
                     car=car,
+                    is_active=True,  # 🔥 soft delete
                     status__in=['pending', 'confirmed', 'active'],
                     end_time__gt=start_time,
                     start_time__lt=end_time
@@ -133,11 +133,10 @@ class BookingSerializer(serializers.ModelSerializer):
             **validated_data
         )
 
-    # Вычисляем и сохраняем цену
+        # вычисляем и сохраняем цену
         booking.calculate_price(save=True)
 
         return booking
-
 
     # =====================================================
     # Update
